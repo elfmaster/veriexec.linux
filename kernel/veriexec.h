@@ -21,4 +21,3 @@ char *veriexec_obj_filepath(veriexec_object_t *obj)
 
 	return obj->filepath;
 }
-
