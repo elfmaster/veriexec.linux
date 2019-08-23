@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,20 +10,23 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include "veriexec_client.h"
+
 int main(int argc, char **argv)
 {
 	struct veriexec_object obj;
-	uint64_t action = 0;
+	char *filename, *filedir;
+	uint64_t action = 0, mode = 0;
 	int c;
 
 	if (argc < 3) {
-		fprintf(stderr, "Usage: %s [-erdi] <dir|executable>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-merdi] <dir|executable>\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
-	memset(&ac, 0, sizeof(obj));
+	memset(&obj, 0, sizeof(obj));
 
-	while ((c = getopt(argc, argv "e:r:di")) != -1) {
+	while ((c = getopt(argc, argv, "m:e:r:di")) != -1) {
 		switch(c) {
 		case 'r':
 			action |= VERIEXEC_CLIENT_F_RECURSIVE;
@@ -47,6 +52,16 @@ int main(int argc, char **argv)
 				exit(EXIT_FAILURE);
 			}
 			break;
+		case 'm':
+			if (strcmp(optarg, "hard") == 0) {
+				mode = VERIEXEC_MODE_F_HARD;
+			} else if (strcmp(optarg, "soft") == 0) {
+				mode = VERIEXEC_MODE_F_SOFT;
+			} else {
+				printf("mode '%s' unknown, use hard or soft\n", optarg);
+			}
+			action |= VERIEXEC_CLIENT_F_MODE;
+			break;
 		default:
 			fprintf(stderr, "Unknown option: -%c\n", c);
 			break;
@@ -57,4 +72,5 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Cannot use the -d and -i option simultaneously\n");
 		exit(EXIT_FAILURE);
 	}
+	
 }

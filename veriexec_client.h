@@ -6,8 +6,12 @@
 #define VERIEXEC_CLIENT_F_DIRECT	(1UL << 1)
 #define VERIEXEC_CLIENT_F_INDIRECT	(1UL << 2)
 #define VERIEXEC_CLIENT_F_EXECUTABLE	(1UL << 3)
+#define VERIEXEC_CLIENT_F_MODE		(1UL << 4)
 
-struct veriexec_linux {
+#define VERIEXEC_MODE_F_HARD		(1UL << 0)
+#define VERIEXEC_MODE_F_SOFT		(1UL << 1)
+
+struct veriexec_object {
 	char *filepath;
 	uint8_t sha256_hash[SHA256_HASH_LEN];
 	struct stat st;
