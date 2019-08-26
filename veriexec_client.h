@@ -11,12 +11,25 @@
 #define VERIEXEC_MODE_F_HARD		(1UL << 0)
 #define VERIEXEC_MODE_F_SOFT		(1UL << 1)
 
+typedef enum vobj_type {
+	VERIEXEC_OBJ_EXEC = 0,
+	VERIEXEC_OBJ_SCRIPT,
+	VERIEXEC_OBJ_SO,
+	VERIEXEC_OBJ_FILE
+} vobj_type_t;
+
+typedef struct scriptobj {
+	char *filepath;
+} scriptobj_t;
+
 struct veriexec_object {
 	char *filepath;
 	uint8_t sha256_hash[SHA256_HASH_LEN];
 	struct stat st;
 	uint8_t *mem;
-	elfobj_t *elfobj;
+	elfobj_t elfobj;
+	scriptobj_t scriptobj;
 	uint64_t flags;
+	vobj_type_t type;
 	SLIST_ENTRY(veriexec_linux) _linkage;
 };
