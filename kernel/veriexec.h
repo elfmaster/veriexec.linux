@@ -6,11 +6,15 @@
 #define VERIEXEC_F_DIRECT	(1ULL << 0)
 #define VERIEXEC_F_INDIRECT	(1ULL << 1)
 
+#define VERIEXEC_T_FILE		(1ULL << 0)
+#define VERIEXEC_T_PROG		(1ULL << 1)
+
 #define SHA256_HASH_LEN 64
 
 typedef struct veriexec_object {
 	char hash_sum[SHA256_HASH_LEN];
 	uint64_t flag;
+	uint64_t type;
 	char *filepath;
 	struct hlist_node hash_table;
 } veriexec_object_t;
