@@ -1,3 +1,15 @@
+/*
+ * elfmaster - ryan@bitlackeys.org
+ * trevor gould
+ * Userland application to send formatted parameters to /proc/veriexec
+ * Examples:
+ * For ELF shared libraries and interpreted scripts
+ * FILE /path/to/file INDIRECT
+ *
+ * For ELF executable binaries
+ * FILE /path/to/file DIRECT
+ */
+
 #define _GNU_SOURCE
 
 #include <assert.h>
@@ -17,16 +29,6 @@
 #include "veriexec_client.h"
 
 #define MAX_CACHE_SIZE 64000
-
-/*
- * Userland application to send formatted parameters to /proc/veriexec
- * Examples:
- * For ELF shared libraries and interpreted scripts
- * FILE /path/to/file INDIRECT
- *
- * For ELF executable binaries
- * FILE /path/to/file DIRECT
- */
 
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
@@ -121,6 +123,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 
 		SHA256_Init(&ctx);
 		SHA256_Update(&ctx, vobj->mem, vobj->st.st_size);
+		SHA256_Final(vobj->sha256_hash, &ctx);
 		SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
 	}
 	/*
@@ -142,6 +145,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	 * directly, must add accessor function to libelfmaster.
 	 */
 	SHA256_Update(&ctx, elfobj.mem, elf_size(&elfobj));
+	SHA256_Final(vobj->sha256_hash, &ctx);
 	SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
 fail:
 	free(vobj);
@@ -213,7 +217,7 @@ main(int argc, char **argv)
 		fprintf(stderr, "Cannot use the -d and -i option simultaneously\n");
 		exit(EXIT_FAILURE);
 	}
-	
+
 	if (hcreate_r(MAX_CACHE_SIZE, &path_cache) == 0) {
 		perror("hcreate_r");
 		exit(EXIT_FAILURE);

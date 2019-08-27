@@ -31,5 +31,5 @@ struct veriexec_object {
 	scriptobj_t scriptobj;
 	uint64_t flags;
 	vobj_type_t type;
-	SLIST_ENTRY(veriexec_linux) _linkage;
+	SLIST_ENTRY(veriexec_object) _linkage;
 };
