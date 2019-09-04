@@ -1,18 +1,20 @@
 /*
+ * Authors: 2019
  * elfmaster - ryan@bitlackeys.org
  * trevor gould
  * Userland application to send formatted parameters to /proc/veriexec
  * Examples:
  * For ELF shared libraries and interpreted scripts
- * FILE /path/to/file INDIRECT
+ * FILE /path/to/file <sha256> INDIRECT
  *
  * For ELF executable binaries
- * FILE /path/to/file DIRECT
+ * FILE /path/to/file <sha256> DIRECT
  */
 
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <openssl/sha.h>
@@ -33,6 +35,40 @@
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
 
+size_t
+vexec_build_path_string(char *filename, char *dirname, char *buf, size_t len)
+{
+	char *p, *q;
+
+	size_t dlen = strlen(dirname);
+
+	memset(buf, 0, len);
+	if (dlen > len)
+		return 0;
+	memcpy(buf, dirname, dlen);
+	p = strrchr(buf, '/');
+	if (p == &buf[0]) {
+		buf[dlen] = '/';
+		dlen += 1;
+	}
+	if (strlen(filename) > len - (dlen + 1))
+		return 0;
+	memcpy(&buf[dlen], filename, strlen(filename));
+	return strlen(buf);
+}
+
+void
+print_hash(uint8_t *hash)
+{
+	int i = 0;
+
+	for (i = 0; i < SHA256_HASH_LEN; i++) {
+		printf("%02x", hash[i]);
+	}
+	printf("\n");
+	return;
+}
+
 bool
 vexec_process_indirect(char *filename, elfobj_t *elfobj, scriptobj_t *scriptobj,
     vobj_type_t *vobj)
@@ -51,16 +87,26 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	scriptobj_t scriptobj;
 	int fd;
 	ENTRY e, *ep;
-	char realpath[PATH_MAX + 1];
+	char path[PATH_MAX] = {0};
 	SHA256_CTX ctx;
 
-	if (readlink(filename, realpath, PATH_MAX) < 0) {
-		perror("readlink");
-		return false;
+	printf("Filename for readlink: %s\n", filename);
+
+	lstat(filename, &st);
+
+	if ((st.st_mode & S_IFMT) == S_IFLNK) {
+		if (realpath(filename, path) == NULL) {
+			perror("realpath");
+			return false;
+		}
+		printf("readlinked: %s\n", path);
+	} else {
+		strncpy(path, filename, PATH_MAX);
+		path[PATH_MAX - 1] = '\0';
 	}
 
-	e.key = realpath;
-	e.data = (char *)realpath;
+	e.key = path;
+	e.data = (char *)path;
 
 	/*
 	 * If hsearch_r returns non zero during our
@@ -68,8 +114,10 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	 * the path. If a path is already memoized we
 	 * don't want to duplicate it.
 	 */
-	if (hsearch_r(e, FIND, &ep, &path_cache) != 0)
+	if (hsearch_r(e, FIND, &ep, &path_cache) != 0) {
+		printf("Entry for %s already exists\n", path);
 		return true;
+	}
 
 	/*
 	 * Let's memoize this path.
@@ -88,12 +136,12 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 		perror("calloc");
 		return false;
 	}
-	vobj->filepath = strdup(realpath);
+	vobj->filepath = strdup(path);
 	if (vobj->filepath == NULL) {
 		perror("strdup");
 		return false;
 	}
-	fd = open(realpath, O_RDONLY);
+	fd = open(path, O_RDONLY);
 	if (fd < 0) {
 		perror("open");
 		return false;
@@ -133,10 +181,14 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	 */
 	assert(flags & VERIEXEC_CLIENT_F_DIRECT);
 
-	if (elf_open_object(filename, &elfobj, ELF_LOAD_F_STRICT,
+	if (elf_open_object(path, &elfobj, ELF_LOAD_F_STRICT,
 	    &error) == false) {
-		perror("elf_open_object");
-		return false;
+		/*
+		 * It should only fail on rare cases like when it fails to
+		 * notice a binary is statically linked (An occasional issue
+		 * with libelfmaster. Or when it has invalid file magic
+		 */
+		return true;
 	}
 	memcpy(&vobj->elfobj, &elfobj, sizeof(elfobj));
 	SHA256_Init(&ctx);
@@ -147,6 +199,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	SHA256_Update(&ctx, elfobj.mem, elf_size(&elfobj));
 	SHA256_Final(vobj->sha256_hash, &ctx);
 	SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
+	return true;
 fail:
 	free(vobj);
 	return false;
@@ -158,16 +211,20 @@ main(int argc, char **argv)
 	struct veriexec_object obj;
 	char *filename, *filedir;
 	uint64_t action = 0, mode = 0;
+	DIR *dirp;
+	struct dirent *entry;
 	int c;
+	bool res;
 
 	if (argc < 3) {
-		fprintf(stderr, "Usage: %s [-merdi] <dir|executable>\n", argv[0]);
+		fprintf(stderr, "Usage: %s [-merdi][-f executable/dir]\n",
+		    argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
 	memset(&obj, 0, sizeof(obj));
 
-	while ((c = getopt(argc, argv, "m:e:r:di")) != -1) {
+	while ((c = getopt(argc, argv, "m:e:r:dif:")) != -1) {
 		switch(c) {
 		case 'r':
 			/*
@@ -184,19 +241,9 @@ main(int argc, char **argv)
 			break;
 		case 'd':
 			action |= VERIEXEC_CLIENT_F_DIRECT;
-			filename = strdup(optarg);
-			if (filename == NULL) {
-				perror("strdup");
-				exit(EXIT_FAILURE);
-			}
 			break;
 		case 'i':
 			action |= VERIEXEC_CLIENT_F_INDIRECT;
-			filename = strdup(optarg);
-			if (filename == NULL) {
-				perror("strdup");
-				exit(EXIT_FAILURE);
-			}
 			break;
 		case 'm':
 			if (strcmp(optarg, "hard") == 0) {
@@ -204,17 +251,27 @@ main(int argc, char **argv)
 			} else if (strcmp(optarg, "soft") == 0) {
 				mode = VERIEXEC_MODE_F_SOFT;
 			} else {
-				printf("mode '%s' unknown, use hard or soft\n", optarg);
+				printf("mode '%s' unknown."
+				    " use hard or soft\n", optarg);
 			}
 			action |= VERIEXEC_CLIENT_F_MODE;
+			break;
+		case 'f':
+			filename = strdup(optarg);
+			if (filename == NULL) {
+				perror("strdup");
+				exit(EXIT_FAILURE);
+			}
 			break;
 		default:
 			fprintf(stderr, "Unknown option: -%c\n", c);
 			break;
 		}
 	}
-	if ((action & VERIEXEC_CLIENT_F_DIRECT) && (action & VERIEXEC_CLIENT_F_INDIRECT)) {
-		fprintf(stderr, "Cannot use the -d and -i option simultaneously\n");
+	if ((action & VERIEXEC_CLIENT_F_DIRECT) &&
+	    (action & VERIEXEC_CLIENT_F_INDIRECT)) {
+		fprintf(stderr,
+		    "Cannot use the -d and -i option simultaneously\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -223,4 +280,37 @@ main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
+	if ((action & VERIEXEC_CLIENT_F_RECURSIVE) == 0) {
+		res = vexec_client_apply_file(filename, action);
+		goto done;
+	}
+
+	dirp = opendir(filedir);
+	if (dirp == NULL) {
+		perror("opendir");
+		exit(EXIT_FAILURE);
+	}
+	for (;;) {
+		char path[PATH_MAX + 1];
+
+		entry = readdir(dirp);
+		if (entry == NULL)
+			break;
+
+		if (strcmp(entry->d_name, ".") == 0 ||
+		    strcmp(entry->d_name, "..") == 0)
+			continue;
+		if (vexec_build_path_string(entry->d_name, filedir, path,
+		    PATH_MAX) == 0) {
+			fprintf(stderr, "Failed to build path name\n");
+			exit(EXIT_FAILURE);
+		}
+		res = vexec_client_apply_file(path, action);
+		if (res == false) {
+			fprintf(stderr, "vexec_client_apply failed\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+done:
+	exit(EXIT_SUCCESS);
 }

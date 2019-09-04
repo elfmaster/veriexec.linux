@@ -11,6 +11,12 @@
 #define VERIEXEC_MODE_F_HARD		(1UL << 0)
 #define VERIEXEC_MODE_F_SOFT		(1UL << 1)
 
+#ifdef DEBUG
+#define VEXEC_DEBUG(...) do { fprintf(stderr, __VA_ARGS__); } while(0)
+#else
+#define VEXEC_DEBUG(...) do {} while(0)
+#endif
+
 typedef enum vobj_type {
 	VERIEXEC_OBJ_EXEC = 0,
 	VERIEXEC_OBJ_SCRIPT,
