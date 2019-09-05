@@ -5,10 +5,12 @@
  * Userland application to send formatted parameters to /proc/veriexec
  * Examples:
  * For ELF shared libraries and interpreted scripts
- * FILE /path/to/file <sha256> INDIRECT
+ * SHARED /path/to/file <sha256> INDIRECT
+ * SCRIPT /path/to/file <sha256> INDIRECT
+ * EXTERNAL /path/to/file <sha256> /path/to/application <sha256> DIRECT/INDIRECT
  *
  * For ELF executable binaries
- * FILE /path/to/file <sha256> DIRECT
+ * EXEC /path/to/file <sha256> DIRECT
  */
 
 #define _GNU_SOURCE
@@ -31,9 +33,69 @@
 #include "veriexec_client.h"
 
 #define MAX_CACHE_SIZE 64000
+#define CMD_SIZE 8192
+
+#define PROC_ENTRY "/tmp/veriexec.tmp"
 
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
+
+void
+vexec_sha256hash_format(uint8_t *input, uint8_t *output)
+{
+	int i;
+
+	for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+		sprintf(&output[i * 2], "%02x", input[i]);
+	}
+	return;
+}
+
+bool
+vexec_write_vobj(struct veriexec_object *obj)
+{
+	int fd;
+	char buf[CMD_SIZE];
+	size_t len;
+
+	fd = open(PROC_ENTRY, O_WRONLY);
+	if (fd < 0) {
+		perror("open bitch");
+		exit(-1);
+	}
+	switch(obj->type) {
+	case VERIEXEC_OBJ_EXEC:
+		strcpy(buf, "EXEC ");
+		if (strlen(obj->filepath) > PATH_MAX) {
+			fprintf(stderr, "Invalid path length: %zu\n",
+			    strlen(obj->filepath));
+			close(fd);
+			return false;
+		}
+		strcat(buf, obj->filepath);
+		strcat(buf, " ");
+		len = strlen("EXEC ") + strlen(obj->filepath) + strlen(" ");
+		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
+		buf[len + 1 + SHA256_HASH_LEN] = '\0';
+		if (obj->flags & VERIEXEC_CLIENT_F_DIRECT) {
+			strcat(buf, " DIRECT");
+		} else {
+			fprintf(stderr,
+			    "INDIRECT flag is not compatible with executables\n");
+			return false;
+		}
+		VEXEC_DEBUG("%s\n", buf);
+		break;
+	case VERIEXEC_OBJ_SCRIPT:
+	case VERIEXEC_OBJ_SO:
+	case VERIEXEC_OBJ_FILE:
+	case VERIEXEC_OBJ_EXTERNAL:
+	default:
+		break;
+	}
+	close(fd);
+	return true;
+}
 
 size_t
 vexec_build_path_string(char *filename, char *dirname, char *buf, size_t len)
@@ -141,15 +203,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 		perror("strdup");
 		return false;
 	}
-	fd = open(path, O_RDONLY);
-	if (fd < 0) {
-		perror("open");
-		return false;
-	}
-	if (fstat(fd, &vobj->st) < 0) {
-		perror("fstat");
-		return false;
-	}
+	vobj->st = st;
 	vobj->flags = flags;
 
 	if (flags & VERIEXEC_CLIENT_F_INDIRECT) {
@@ -172,6 +226,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 		SHA256_Init(&ctx);
 		SHA256_Update(&ctx, vobj->mem, vobj->st.st_size);
 		SHA256_Final(vobj->sha256_hash, &ctx);
+		vexec_sha256hash_format(vobj->sha256_hash, vobj->sha256_output);
 		SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
 	}
 	/*
@@ -198,6 +253,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	 */
 	SHA256_Update(&ctx, elfobj.mem, elf_size(&elfobj));
 	SHA256_Final(vobj->sha256_hash, &ctx);
+	vexec_sha256hash_format(vobj->sha256_hash, vobj->sha256_output);
 	SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
 	return true;
 fail:
@@ -215,6 +271,7 @@ main(int argc, char **argv)
 	struct dirent *entry;
 	int c;
 	bool res;
+	struct veriexec_object *vobj;
 
 	if (argc < 3) {
 		fprintf(stderr, "Usage: %s [-merdi][-f executable/dir]\n",
@@ -285,6 +342,7 @@ main(int argc, char **argv)
 		goto done;
 	}
 
+	printf("Opening: %s\n", filedir);
 	dirp = opendir(filedir);
 	if (dirp == NULL) {
 		perror("opendir");
@@ -312,5 +370,9 @@ main(int argc, char **argv)
 		}
 	}
 done:
+
+	SLIST_FOREACH(vobj, &vobj_list, _linkage) {
+		vexec_write_vobj(vobj);
+	}
 	exit(EXIT_SUCCESS);
 }

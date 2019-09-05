@@ -21,7 +21,8 @@ typedef enum vobj_type {
 	VERIEXEC_OBJ_EXEC = 0,
 	VERIEXEC_OBJ_SCRIPT,
 	VERIEXEC_OBJ_SO,
-	VERIEXEC_OBJ_FILE
+	VERIEXEC_OBJ_FILE,
+	VERIEXEC_OBJ_EXTERNAL /* For external execution launching */
 } vobj_type_t;
 
 typedef struct scriptobj {
@@ -31,11 +32,13 @@ typedef struct scriptobj {
 struct veriexec_object {
 	char *filepath;
 	uint8_t sha256_hash[SHA256_HASH_LEN];
+	uint8_t sha256_output[SHA256_HASH_LEN];
 	struct stat st;
 	uint8_t *mem;
 	elfobj_t elfobj;
 	scriptobj_t scriptobj;
 	uint64_t flags;
 	vobj_type_t type;
+	struct veriexec_obj *subobj; /* For external application launch */
 	SLIST_ENTRY(veriexec_object) _linkage;
 };
