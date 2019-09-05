@@ -87,6 +87,29 @@ vexec_write_vobj(struct veriexec_object *obj)
 		VEXEC_DEBUG("%s\n", buf);
 		break;
 	case VERIEXEC_OBJ_SCRIPT:
+		strcpy(buf, "SCRIPT ");
+		printf("processing ");
+		printf("%s\n", obj->filepath);
+		if (strlen(obj->filepath) > PATH_MAX) {
+			fprintf(stderr, "Invalid path length: %zu\n",
+			    strlen(obj->filepath));
+			close(fd);
+			return false;
+		}
+		strcat(buf, obj->filepath);
+		strcat(buf, " ");
+		len = strlen("SCRIPT ") + strlen(obj->filepath) + strlen(" ");
+		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
+		buf[len + 1 + SHA256_HASH_LEN] = '\0';
+		if (obj->flags & VERIEXEC_CLIENT_F_INDIRECT) {
+			strcat(buf, " INDIRECT");
+		} else {
+			fprintf(stderr,
+			    "DIRECT flag is not compatible with scripts\n");
+			return false;
+		}
+		VEXEC_DEBUG("%s\n", buf);
+		break;
 	case VERIEXEC_OBJ_SO:
 	case VERIEXEC_OBJ_FILE:
 	case VERIEXEC_OBJ_EXTERNAL:
@@ -140,7 +163,7 @@ vexec_process_indirect(char *filename, elfobj_t *elfobj, scriptobj_t *scriptobj,
 }
 
 bool
-vexec_client_apply_file(char *filename, uint64_t flags)
+vexec_client_apply_file(char *filename, uint64_t flags, uint64_t type)
 {
 	struct veriexec_object *vobj = NULL;
 	struct stat st;
@@ -154,7 +177,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 
 	printf("Filename for readlink: %s\n", filename);
 
-	lstat(filename, &st);
+	(void) lstat(filename, &st);
 
 	if ((st.st_mode & S_IFMT) == S_IFLNK) {
 		if (realpath(filename, path) == NULL) {
@@ -166,10 +189,12 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 		strncpy(path, filename, PATH_MAX);
 		path[PATH_MAX - 1] = '\0';
 	}
+	(void) lstat(path, &st);
 
 	e.key = path;
 	e.data = (char *)path;
 
+	printf("path: %s\n", path);
 	/*
 	 * If hsearch_r returns non zero during our
 	 * FIND lookup then we know that it found
@@ -205,16 +230,13 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	}
 	vobj->st = st;
 	vobj->flags = flags;
+	vobj->type = type;
 
 	if (flags & VERIEXEC_CLIENT_F_INDIRECT) {
 		bool res;
+		int fd;
 
-		vobj = calloc(1, sizeof(*vobj));
-		if (vobj == NULL) {
-			perror("calloc");
-			return false;
-		}
-		res = vexec_process_indirect(filename, &elfobj,
+		res = vexec_process_indirect(path, &elfobj,
 		    &scriptobj, &vobj->type);
 		if (res == false) {
 			fprintf(stderr, "Failed to process indirect file: %s\n",
@@ -222,12 +244,24 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 			return false;
 		}
 		memcpy(&vobj->scriptobj, &scriptobj, sizeof(scriptobj));
-
+		fd = open(path, O_RDONLY);
+		if (fd < 0) {
+			perror("open");
+			return false;
+		}
+		vobj->mem = mmap(NULL, vobj->st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+		if (vobj->mem == MAP_FAILED) {
+			perror("mmap");
+			return false;
+		}
 		SHA256_Init(&ctx);
 		SHA256_Update(&ctx, vobj->mem, vobj->st.st_size);
 		SHA256_Final(vobj->sha256_hash, &ctx);
 		vexec_sha256hash_format(vobj->sha256_hash, vobj->sha256_output);
 		SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
+		munmap(vobj->mem, vobj->st.st_size);
+		close(fd);
+		return true;
 	}
 	/*
 	 * If VERIEXEC_CLIENT_F_INDIRECT is not set then we should have
@@ -245,7 +279,6 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 		 */
 		return true;
 	}
-	memcpy(&vobj->elfobj, &elfobj, sizeof(elfobj));
 	SHA256_Init(&ctx);
 	/*
 	 * XXX not suppose to access opaque type elfobj_t
@@ -255,6 +288,7 @@ vexec_client_apply_file(char *filename, uint64_t flags)
 	SHA256_Final(vobj->sha256_hash, &ctx);
 	vexec_sha256hash_format(vobj->sha256_hash, vobj->sha256_output);
 	SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
+	elf_close_object(&elfobj);
 	return true;
 fail:
 	free(vobj);
@@ -266,7 +300,7 @@ main(int argc, char **argv)
 {
 	struct veriexec_object obj;
 	char *filename, *filedir;
-	uint64_t action = 0, mode = 0;
+	uint64_t action = 0, mode = 0, type = 0;
 	DIR *dirp;
 	struct dirent *entry;
 	int c;
@@ -281,8 +315,14 @@ main(int argc, char **argv)
 
 	memset(&obj, 0, sizeof(obj));
 
-	while ((c = getopt(argc, argv, "m:e:r:dif:")) != -1) {
+	while ((c = getopt(argc, argv, "Ssm:e:r:dif:")) != -1) {
 		switch(c) {
+		case 's':
+			type = VERIEXEC_OBJ_SCRIPT;
+			break;
+		case 'l': /* shared library */
+			type = VERIEXEC_OBJ_SO;
+			break;
 		case 'r':
 			/*
 			 * Tells this application to apply to files
@@ -338,7 +378,7 @@ main(int argc, char **argv)
 	}
 
 	if ((action & VERIEXEC_CLIENT_F_RECURSIVE) == 0) {
-		res = vexec_client_apply_file(filename, action);
+		res = vexec_client_apply_file(filename, action, type);
 		goto done;
 	}
 
@@ -363,7 +403,7 @@ main(int argc, char **argv)
 			fprintf(stderr, "Failed to build path name\n");
 			exit(EXIT_FAILURE);
 		}
-		res = vexec_client_apply_file(path, action);
+		res = vexec_client_apply_file(path, action, type);
 		if (res == false) {
 			fprintf(stderr, "vexec_client_apply failed\n");
 			exit(EXIT_FAILURE);
