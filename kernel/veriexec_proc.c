@@ -29,7 +29,33 @@ static ssize_t
 recv_veriexec_cmd(struct file *file, const char __user *ubuf,
     size_t count, loff_t *ppos)
 {
-	fp = filp_open(file->filepath, O_RDONLY, 0); // lets open file
+
+	char *p = strchr(ubuf, ' ');//when calculating position of spaces, there will be an edge
+	//case where a path can have a space, account for that after it works with spaceless paths
+    *p = 0;
+	//strchr for first space and then putt a null byte and then 
+	
+    if (strcmp(buf, "EXEC")==0) {
+    	file->type = VERIEXEC_OBJ_EXEC;
+   	}else if (strcmp(buf, "SO")==0){
+ 		file->type = VERIEXEC_OBJ_SO;
+    }else if (strcmp(buf, "FILE")==0){
+		file->type = VERIEXEC_OBJ_FILE;
+    }else if (strcmp(buf, "EXTERNAL")==0){
+ 		file->type = VERIEXEC_OBJ_EXTERNAL;
+    }else if (strcmp(buf, "SCRIPT")==0){//turn these to n functions for SECURITY
+ 		file->type = VERIEXEC_OBJ_SCRIPT;
+ 	}else{
+ 		printk("Type is incorrect");
+ 		return -1;
+ 	}
+ 	p++;
+
+
+
+
+ 	//eventually we'll have the path set and see if its there
+ 	fp = filp_open(file->filepath, O_RDONLY, 0); // lets open file
 	procfs_buffer_size = count;//dont know if I need this for sure, will delete if necessary
 	hlnSize = kmalloc(sizeof(struct hlist_node *), GFP_KERNEL); //hashlistnodeSize
 
@@ -38,31 +64,11 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
      	printk("was not able to open signature file\n"); 
     	return -1;
     }else{
-    	
+
     }
     if (procfs_buffer_size > PROCFS_MAX_SIZE ) { //verify size is correct
 		procfs_buffer_size = PROCFS_MAX_SIZE;
 	}
-
-	char *p = strchr(buf, ' ')
-    *p = 0;
-	//strchr for first space and then putt a null byte and then 
-	
-    if (strcmp(buf, "EXEC")==0) {
-    	type = VERIEXEC_OBJ_EXEC;
-   	}else if (strcmp(buf, "SO")==0){
- 		type = VERIEXEC_OBJ_SO;
-    }else if (strcmp(buf, "FILE")==0){
-		type = VERIEXEC_OBJ_FILE;
-    }else if (strcmp(buf, "EXTERNAL")==0){
- 		type = VERIEXEC_OBJ_EXTERNAL;
-    }else if (strcmp(buf, "SCRIPT")==0){//turn these to n functions for SECURITY
- 		type = VERIEXEC_OBJ_SCRIPT;
- 	}else{
- 		printk("Type is incorrect");
- 		return -1;
- 	}
- 	p++;
  	
 
 	//this is similar to procwrite
@@ -81,18 +87,20 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 	//checkk veriexec.h
 	//take this in and store in hashtable in kernel 
 	//parse info and set flags in struct
-	char *p = ubuf;
+	//char *p = ubuf;
 	//while (*p != 0x20)
-	while (*p){}
-		if(*p != 0x20)
-			file->key = key;//this will be removed
-			hash_add(sigTable, hlnSize, &file->hash_table, file->key/*we need a way to derive a key*/);
-			key++;//this will be removed
-			p++;
-		}
+	//while (*p){
+	//	if(*p != 0x20)
+	//		file->key = key;//this will be removed
+	//		hash_add(sigTable, hlnSize, &file->hash_table, file->key/*we need a way to derive a key*/);
+	//		key++;//this will be removed
+	//		p++;
+	//	}
+	//
 	//global hash table
 	//proc_create("signaturesVE",0,NULL,&proc_fops);
 	//msg=kmalloc(10*sizeof(char).GFP_KERNEL);
+	hash_add(sigTable, hlnSize, &file->hash_table, file->key/*we need a way to derive a key*/);//actually key is gonna be the signature
 
 	return -1;
 	
