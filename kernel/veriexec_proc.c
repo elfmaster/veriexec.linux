@@ -57,9 +57,24 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
  	*p = strchr(ubuf, ' ');
  	int *prev = p;
  	*p = strchr(ubuf, ' ');
- 	file->filepath=prev;//we verify this later
+ 	if(sizeof(prev) > 4096 && sizeof(prev) <1){
+ 		printk("path size is either to long or to short");
+ 	} else{
+ 		file->filepath=prev;//we verify this later
+ 	}
+ 	
+ 	
+ 	int *prev = p;
+ 	*p = strchr(ubuf, ' ');
+ 	file->hash_sum = prev;
 
-
+ 	if(strcmp(ubuf, "DIRECT")==0){
+ 		file->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
+ 	} else if(strcmp(ubuf, "INDIRECT")==0){
+ 		file->flag = INDIRECT;
+ 	}
+ 	int *prev = p;
+ 	*p = strchr(ubuf, ' ');
 
  	//eventually we'll have the path set and see if its there
  	fp = filp_open(file->filepath, O_RDONLY, 0); // lets open file
@@ -71,12 +86,14 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
      	printk("was not able to open signature file\n"); 
     	return -1;
     }else{
-
+    	file->filepath=prev;//we verify this later
     }
+
+
     if (procfs_buffer_size > PROCFS_MAX_SIZE ) { //verify size is correct
 		procfs_buffer_size = PROCFS_MAX_SIZE;
 	}
- 	
+ 	hash_add(sigTable, hlnSize, &file->hash_table, file->hash_sum/*we need a way to derive a key*/);//actually key is gonna be the signature
 
 	//this is similar to procwrite
 	//similar to doing  aproc entry
@@ -107,7 +124,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 	//global hash table
 	//proc_create("signaturesVE",0,NULL,&proc_fops);
 	//msg=kmalloc(10*sizeof(char).GFP_KERNEL);
-	hash_add(sigTable, hlnSize, &file->hash_table, file->key/*we need a way to derive a key*/);//actually key is gonna be the signature
+	
 
 	return -1;
 	
