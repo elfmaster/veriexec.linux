@@ -16,6 +16,7 @@
 #define _GNU_SOURCE
 
 #include <assert.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -39,6 +40,18 @@
 
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
+
+bool
+vexec_is_binary(uint8_t *mem, size_t len)
+{
+	int i;
+
+	for (i = 0; i < len; i++) {
+		if (!isprint(mem[i]))
+			return true;
+	}
+	return false;
+}
 
 void
 vexec_sha256hash_format(uint8_t *input, uint8_t *output)
@@ -88,8 +101,6 @@ vexec_write_vobj(struct veriexec_object *obj)
 		break;
 	case VERIEXEC_OBJ_SCRIPT:
 		strcpy(buf, "SCRIPT ");
-		printf("processing ");
-		printf("%s\n", obj->filepath);
 		if (strlen(obj->filepath) > PATH_MAX) {
 			fprintf(stderr, "Invalid path length: %zu\n",
 			    strlen(obj->filepath));
@@ -252,6 +263,11 @@ vexec_client_apply_file(char *filename, uint64_t flags, uint64_t type)
 		vobj->mem = mmap(NULL, vobj->st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 		if (vobj->mem == MAP_FAILED) {
 			perror("mmap");
+			return false;
+		}
+		if (vexec_is_binary(vobj->mem, vobj->st.st_size) == true) {
+			fprintf(stderr, "script file '%s' must be a text file\n", path);
+			free(vobj);
 			return false;
 		}
 		SHA256_Init(&ctx);
