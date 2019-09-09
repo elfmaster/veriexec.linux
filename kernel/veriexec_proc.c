@@ -35,22 +35,29 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
     *p = 0;
 	//strchr for first space and then putt a null byte and then 
 	
-    if (strcmp(buf, "EXEC")==0) {
+    if (strcmp(ubuf, "EXEC")==0) {
     	file->type = VERIEXEC_OBJ_EXEC;
-   	}else if (strcmp(buf, "SO")==0){
+   	}else if (strcmp(ubuf, "SO")==0){
  		file->type = VERIEXEC_OBJ_SO;
-    }else if (strcmp(buf, "FILE")==0){
+    }else if (strcmp(ubuf, "FILE")==0){
 		file->type = VERIEXEC_OBJ_FILE;
-    }else if (strcmp(buf, "EXTERNAL")==0){
+    }else if (strcmp(ubuf, "EXTERNAL")==0){
  		file->type = VERIEXEC_OBJ_EXTERNAL;
-    }else if (strcmp(buf, "SCRIPT")==0){//turn these to n functions for SECURITY
+    }else if (strcmp(ubuf, "SCRIPT")==0){//turn these to n functions for SECURITY
  		file->type = VERIEXEC_OBJ_SCRIPT;
  	}else{
  		printk("Type is incorrect");
  		return -1;
  	}
- 	p++;
-
+ 	p++;//this is incorrect but will compile for now, need ignore everything after stirng found and see if there is 1 or 2 spaces
+ 	if((*p+1)==' '){
+ 		printk("there was an extra space");//this is debug and will remove later
+ 		p++;
+ 	}
+ 	*p = strchr(ubuf, ' ');
+ 	int *prev = p;
+ 	*p = strchr(ubuf, ' ');
+ 	file->filepath=prev;//we verify this later
 
 
 
