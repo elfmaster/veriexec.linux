@@ -9,8 +9,9 @@
 #include "veriexec.h"
 
 #define CMDSIZE 4096
+#define SIGSIZE 16
 
-#define DEFINE_HASHTABLE(sigTable, 32) //32 might be big as it makes the amount of buckets 2^32
+static DEFINE_HASHTABLE(sigTable, SIGSIZE); //32 might be big as it makes the amount of buckets 2^32
 
 
 //this is the hashtable we are using to store signatures
@@ -21,12 +22,12 @@
 MODULE_LICENSE("LSD");
 MODULE_AUTHOR("ElfMaster and TrevorG");
 
-key = 0;//this is temporary and will not be used, I am just using it to test hashtable
+
 		//til I find a better way to derive a key
 static struct proc_dir_entry *ent;
 
 static ssize_t
-recv_veriexec_cmd(struct file *file, const char __user *ubuf,
+recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
     size_t count, loff_t *ppos)
 {
 
