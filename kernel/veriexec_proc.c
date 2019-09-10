@@ -6,6 +6,9 @@
 #include <asm/uaccess.h>
 #include <linux/errno.h>
 
+#include <string.h>
+#include <stdio.h>//these 2 headers are temporary,will write my own versions of functions i need
+
 #include "veriexec.h"
 
 #define CMDSIZE 4096
@@ -27,9 +30,10 @@ MODULE_AUTHOR("ElfMaster and TrevorG");
 static struct proc_dir_entry *ent;
 
 static ssize_t
-recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
+recv_veriexec_cmd(struct file *file, const char __user *ubuf,
     size_t count, loff_t *ppos)
 {
+	struct veriexec_object * vobj;
 	char *p = ubuf;
 	char *prev;
 	size_t dist;
@@ -46,15 +50,15 @@ recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
 	}
 	if(flag == 1){
 		if (strncmp(p, "EXEC", dist)==0) {
-    		file->type = VERIEXEC_OBJ_EXEC;
-   		}else if (strncmp(ubuf, "SO", dist)==0){
- 			file->type = VERIEXEC_OBJ_SO;
-    	}else if (strncmp(ubuf, "FILE", dist)==0){
-			file->type = VERIEXEC_OBJ_FILE;
-	    }else if (strncmp(ubuf, "EXTERNAL", dist)==0){
- 			file->type = VERIEXEC_OBJ_EXTERNAL;
-    	}else if (strncmp(ubuf, "SCRIPT", dist)==0){//turn these to n functions for SECURITY
- 			file->type = VERIEXEC_OBJ_SCRIPT;
+    		vobj->type = VERIEXEC_OBJ_EXEC;
+   		}else if (strncmp(prev, "SO", dist)==0){
+ 			vobj->type = VERIEXEC_OBJ_SO;
+    	}else if (strncmp(prev, "FILE", dist)==0){
+			vobj->type = VERIEXEC_OBJ_FILE;
+	    }else if (strncmp(prev, "EXTERNAL", dist)==0){
+ 			vobj->type = VERIEXEC_OBJ_EXTERNAL;
+    	}else if (strncmp(prev, "SCRIPT", dist)==0){//turn these to n functions for SECURITY
+ 			vobj->type = VERIEXEC_OBJ_SCRIPT;
  		}else{
  			printk("Type is incorrect");
  			return -1;
@@ -64,38 +68,37 @@ recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
  			printk("path size is either to long or to short");
  			return -1;
  		} else{
- 			strncpy(prev,file->filepath,dist);
+ 			strncpy(prev,vobj->filepath,dist);
  			//we verify this later
  		}
  	} else if(flag==3){
  		//need to handle signature
  		//will add things in to verify signature size later
- 		strncpy(prev,file->hash_sum,dist);
+ 		strncpy(prev,vobj->hash_sum,dist);
 
 	} else if(flag==4){
-		if(strncmp(p, "DIRECT")==0){
- 			file->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
- 		} else if(strncmp(p, "INDIRECT")==0){
- 			file->flag = INDIRECT;
+		if(strncmp(p, "DIRECT",dist)==0){
+ 			vobj->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
+ 		} else if(strncmp(p, "INDIRECT",dist)==0){
+ 			vobj->flag = INDIRECT;
  		} else {
  			printk("incorrect flag");
  			return -1;
  		}
 
 	} else if(flag==5){
-		fp = filp_open(file->filepath, O_RDONLY, 0); // lets open file
-		procfs_buffer_size = count;//dont know if I need this for sure, will delete if necessary
+		file = filp_open(vobj->filepath, O_RDONLY, 0); // lets open file
 		hlnSize = kmalloc(sizeof(struct hlist_node *), GFP_KERNEL); //hashlistnodeSize
 
 
-		if(fp == NULL) {	//and then check to see if its there
+		if(file == NULL) {	//and then check to see if its there
      		printk("was not able to open signature file\n"); 
     		return -1;
     	}else{
-    		file->filepath=prev;//we verify this later
+    		vobj->filepath=prev;//we verify this later
     	}
 
- 		hash_add(sigTable, hlnSize, &file->hash_table, file->hash_sum/*we need a way to derive a key*/);//actually key is gonna be the signature
+ 		hash_add(sigTable, hlnSize, &vobj->hash_table, vobj->hash_sum/*we need a way to derive a key*/);//actually key is gonna be the signature
 		return 0;
 	}
 	
