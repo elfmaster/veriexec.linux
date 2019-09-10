@@ -30,7 +30,78 @@ static ssize_t
 recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
     size_t count, loff_t *ppos)
 {
+	char *p = ubuf;
+	char *prev;
+	size_t dist;
+	int flag = 0; //bad way of doing this, will fix later
+	while(p){
+	flag++;
+	if(*p==0x20){//will eventually throw out other shit we dont need besides spaces
+		*prev = *p;
+		dist = *prev-*p-1;//nick would kill me
+		while((*p+1)==0x20){//looks for extra spaces, make sure you copy stings based off of prev not p
+			printk("there was an extra space");
+			*p=*p+1;
+		}
+	}
+	if(flag == 1){
+		if (strncmp(p, "EXEC", dist)==0) {
+    		file->type = VERIEXEC_OBJ_EXEC;
+   		}else if (strncmp(ubuf, "SO", dist)==0){
+ 			file->type = VERIEXEC_OBJ_SO;
+    	}else if (strncmp(ubuf, "FILE", dist)==0){
+			file->type = VERIEXEC_OBJ_FILE;
+	    }else if (strncmp(ubuf, "EXTERNAL", dist)==0){
+ 			file->type = VERIEXEC_OBJ_EXTERNAL;
+    	}else if (strncmp(ubuf, "SCRIPT", dist)==0){//turn these to n functions for SECURITY
+ 			file->type = VERIEXEC_OBJ_SCRIPT;
+ 		}else{
+ 			printk("Type is incorrect");
+ 			return -1;
+ 		}
+	} else if(flag == 2){
+		if(dist > 4096 && dist <1){
+ 			printk("path size is either to long or to short");
+ 			return -1;
+ 		} else{
+ 			strncpy(prev,file->filepath,dist);
+ 			//we verify this later
+ 		}
+ 	} else if(flag==3){
+ 		//need to handle signature
+ 		//will add things in to verify signature size later
+ 		strncpy(prev,file->hash_sum,dist);
 
+	} else if(flag==4){
+		if(strncmp(p, "DIRECT")==0){
+ 			file->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
+ 		} else if(strncmp(p, "INDIRECT")==0){
+ 			file->flag = INDIRECT;
+ 		} else {
+ 			printk("incorrect flag");
+ 			return -1;
+ 		}
+
+	} else if(flag==5){
+		fp = filp_open(file->filepath, O_RDONLY, 0); // lets open file
+		procfs_buffer_size = count;//dont know if I need this for sure, will delete if necessary
+		hlnSize = kmalloc(sizeof(struct hlist_node *), GFP_KERNEL); //hashlistnodeSize
+
+
+		if(fp == NULL) {	//and then check to see if its there
+     		printk("was not able to open signature file\n"); 
+    		return -1;
+    	}else{
+    		file->filepath=prev;//we verify this later
+    	}
+
+ 		hash_add(sigTable, hlnSize, &file->hash_table, file->hash_sum/*we need a way to derive a key*/);//actually key is gonna be the signature
+		return 0;
+	}
+	
+}
+}
+/*
 	char *p = strchr(ubuf, ' ');//when calculating position of spaces, there will be an edge
 	//case where a path can have a space, account for that after it works with spaceless paths
     *p = 0;
@@ -60,6 +131,7 @@ recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
  	*p = strchr(ubuf, ' ');
  	if(sizeof(prev) > 4096 && sizeof(prev) <1){
  		printk("path size is either to long or to short");
+ 		return -1;
  	} else{
  		file->filepath=prev;//we verify this later
  	}
@@ -73,6 +145,9 @@ recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
  		file->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
  	} else if(strcmp(ubuf, "INDIRECT")==0){
  		file->flag = INDIRECT;
+ 	} else {
+ 		printk("incorrect flag");
+ 		return -1;
  	}
  	int *prev = p;
  	*p = strchr(ubuf, ' ');
@@ -127,13 +202,13 @@ recv_veriexec_cmd(struct veriexec_object *file, const char __user *ubuf,
 	//msg=kmalloc(10*sizeof(char).GFP_KERNEL);
 	
 
-	return -1;
+//	return -1;
 	
 
 
 
 	
-}
+//}
 
 static ssize_t
 proc_read(struct file *file, char __user *ubuf, size_t count, loff_t *ppos)
