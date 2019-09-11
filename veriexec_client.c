@@ -93,6 +93,7 @@ vexec_write_vobj(struct veriexec_object *obj)
 		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
 		buf[len + 1 + SHA256_HASH_LEN] = '\0';
 		len = len + 1 + SHA256_HASH_LEN;
+		len += strlen(" DIRECT");
 		if (obj->flags & VERIEXEC_CLIENT_F_DIRECT) {
 			strcat(buf, " DIRECT");
 		} else {
@@ -116,6 +117,7 @@ vexec_write_vobj(struct veriexec_object *obj)
 		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
 		buf[len + 1 + SHA256_HASH_LEN] = '\0';
 		len = len + 1 + SHA256_HASH_LEN;
+		len += strlen(" INDIRECT");
 		if (obj->flags & VERIEXEC_CLIENT_F_INDIRECT) {
 			strcat(buf, " INDIRECT");
 		} else {
