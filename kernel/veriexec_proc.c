@@ -3,7 +3,6 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
-//#include <asm/uaccess.h>//is this needed? what is this for? it is throwing an error so I commented it out
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/types.h> //dont think I need this anymore
@@ -12,12 +11,12 @@
 
 #include "veriexec.h"
 #define SHA256_HASH_LEN 64
-#define CMDSIZE 4096
+//#define CMDSIZE 4096
 //#define SIGSIZE (16)
 
-DEFINE_HASHTABLE(sigTable, 16); //32 might be big as it makes the amount of buckets 2^32
+DEFINE_HASHTABLE(sigTable, 8); //32 might be big as it makes the amount of buckets 2^32
 
-hash_init(sigTable);
+//hash_init(sigTable);
 //this is the hashtable we are using to store signatures
 //this isnt defined correctly, I will figure out how to do that, it its literally the amount of bits we can use 
 //like if I have 3 bits I can have 8 buckets as 2^3 or 2^n
@@ -29,8 +28,8 @@ MODULE_AUTHOR("ElfMaster and TrevorG");
 static struct proc_dir_entry *ent;
 
 static ssize_t
-recv_veriexec_cmd(struct file *file, char __user *ubuf,
-    size_t count)//ubuf used to be a const however i do manipulations to it so i changed it away might add it back
+recv_veriexec_cmd(struct file *file, const char *ubuf,
+    size_t count, loff_t *off)//ubuf used to be a const however i do manipulations to it so i changed it away might add it back
 {
 	struct veriexec_object * vobj;
 	char *p = ubuf;
@@ -39,6 +38,10 @@ recv_veriexec_cmd(struct file *file, char __user *ubuf,
 	int flag = 0; //bad way of doing this, will fix later
 	while(p){
 	flag++;
+
+	printk(KERN_DEBUG "inside the fuqin function bitch\n");
+//	(void) off;
+
 	if(*p==0x20){//will eventually throw out other shit we dont need besides spaces
 		*prev = *p;
 		dist = *prev-*p-1;//nick would kill me
@@ -129,7 +132,7 @@ static struct file_operations fops = {
 static int 
 veriexec_init(void)
 {
-
+	hash_init(sigTable);
 	ent = proc_create("veriexec", 0600, NULL, &fops);
 	return 0;
 }
