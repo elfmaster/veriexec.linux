@@ -73,7 +73,7 @@ vexec_write_vobj(struct veriexec_object *obj)
 
 	fd = open(PROC_ENTRY, O_WRONLY);
 	if (fd < 0) {
-		perror("open bitch");
+		perror("open");
 		exit(-1);
 	}
 	switch(obj->type) {
@@ -158,7 +158,7 @@ print_hash(uint8_t *hash)
 {
 	int i = 0;
 
-	for (i = 0; i < SHA256_HASH_LEN; i++) {
+	for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
 		printf("%02x", hash[i]);
 	}
 	printf("\n");
@@ -305,6 +305,7 @@ vexec_client_apply_file(char *filename, uint64_t flags, uint64_t type)
 	vexec_sha256hash_format(vobj->sha256_hash, vobj->sha256_output);
 	SLIST_INSERT_HEAD(&vobj_list, vobj, _linkage);
 	elf_close_object(&elfobj);
+	print_hash(vobj->sha256_hash);
 	return true;
 fail:
 	free(vobj);
@@ -315,7 +316,7 @@ int
 main(int argc, char **argv)
 {
 	struct veriexec_object obj;
-	char *filename, *filedir;
+	char *filepath = NULL;
 	uint64_t action = 0, mode = 0, type = 0;
 	DIR *dirp;
 	struct dirent *entry;
@@ -324,7 +325,7 @@ main(int argc, char **argv)
 	struct veriexec_object *vobj;
 
 	if (argc < 3) {
-		fprintf(stderr, "Usage: %s [-merdi][-f executable/dir]\n",
+		fprintf(stderr, "Usage: %s [-merdi][-f executable || directory]\n",
 		    argv[0]);
 		exit(EXIT_FAILURE);
 	}
@@ -346,11 +347,6 @@ main(int argc, char **argv)
 			 * is not passed into /proc/veriexec
 			 */
 			action |= VERIEXEC_CLIENT_F_RECURSIVE;
-			filedir = strdup(optarg);
-			if (filedir == NULL) {
-				perror("strdup");
-				exit(EXIT_FAILURE);
-			}
 			break;
 		case 'd':
 			action |= VERIEXEC_CLIENT_F_DIRECT;
@@ -370,8 +366,8 @@ main(int argc, char **argv)
 			action |= VERIEXEC_CLIENT_F_MODE;
 			break;
 		case 'f':
-			filename = strdup(optarg);
-			if (filename == NULL) {
+			filepath = strdup(optarg);
+			if (filepath == NULL) {
 				perror("strdup");
 				exit(EXIT_FAILURE);
 			}
@@ -381,6 +377,11 @@ main(int argc, char **argv)
 			break;
 		}
 	}
+	if (filepath == NULL) {
+		fprintf(stderr, "Use -f to specify a file or directory path\n");
+		exit(EXIT_FAILURE);
+	}
+
 	if ((action & VERIEXEC_CLIENT_F_DIRECT) &&
 	    (action & VERIEXEC_CLIENT_F_INDIRECT)) {
 		fprintf(stderr,
@@ -394,12 +395,12 @@ main(int argc, char **argv)
 	}
 
 	if ((action & VERIEXEC_CLIENT_F_RECURSIVE) == 0) {
-		res = vexec_client_apply_file(filename, action, type);
+		res = vexec_client_apply_file(filepath, action, type);
 		goto done;
 	}
 
-	printf("Opening: %s\n", filedir);
-	dirp = opendir(filedir);
+	printf("Opening: %s\n", filepath);
+	dirp = opendir(filepath);
 	if (dirp == NULL) {
 		perror("opendir");
 		exit(EXIT_FAILURE);
@@ -414,7 +415,7 @@ main(int argc, char **argv)
 		if (strcmp(entry->d_name, ".") == 0 ||
 		    strcmp(entry->d_name, "..") == 0)
 			continue;
-		if (vexec_build_path_string(entry->d_name, filedir, path,
+		if (vexec_build_path_string(entry->d_name, filepath, path,
 		    PATH_MAX) == 0) {
 			fprintf(stderr, "Failed to build path name\n");
 			exit(EXIT_FAILURE);
