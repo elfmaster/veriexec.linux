@@ -36,7 +36,7 @@
 #define MAX_CACHE_SIZE 64000
 #define CMD_SIZE 8192
 
-#define PROC_ENTRY "/tmp/veriexec.tmp"
+#define PROC_ENTRY "/proc/veriexec"
 
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
@@ -70,6 +70,8 @@ vexec_write_vobj(struct veriexec_object *obj)
 	int fd;
 	char buf[CMD_SIZE];
 	size_t len;
+	ssize_t bytes;
+	bool res = true;
 
 	fd = open(PROC_ENTRY, O_WRONLY);
 	if (fd < 0) {
@@ -90,6 +92,7 @@ vexec_write_vobj(struct veriexec_object *obj)
 		len = strlen("EXEC ") + strlen(obj->filepath) + strlen(" ");
 		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
 		buf[len + 1 + SHA256_HASH_LEN] = '\0';
+		len = len + 1 + SHA256_HASH_LEN;
 		if (obj->flags & VERIEXEC_CLIENT_F_DIRECT) {
 			strcat(buf, " DIRECT");
 		} else {
@@ -112,6 +115,7 @@ vexec_write_vobj(struct veriexec_object *obj)
 		len = strlen("SCRIPT ") + strlen(obj->filepath) + strlen(" ");
 		memcpy(&buf[len], obj->sha256_output, SHA256_HASH_LEN);
 		buf[len + 1 + SHA256_HASH_LEN] = '\0';
+		len = len + 1 + SHA256_HASH_LEN;
 		if (obj->flags & VERIEXEC_CLIENT_F_INDIRECT) {
 			strcat(buf, " INDIRECT");
 		} else {
@@ -127,8 +131,13 @@ vexec_write_vobj(struct veriexec_object *obj)
 	default:
 		break;
 	}
+	bytes = write(fd, buf, len);
+	if (bytes < 0) {
+		perror("write");
+		res = false;
+	}
 	close(fd);
-	return true;
+	return res;
 }
 
 size_t
