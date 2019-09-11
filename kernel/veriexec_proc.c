@@ -3,17 +3,19 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
-#include <asm/uaccess.h>
+//#include <asm/uaccess.h>//is this needed? what is this for? it is throwing an error so I commented it out
+#include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/types.h> //dont think I need this anymore
 #include <linux/rhashtable.h> //need this for rhashtable which is new implementation
+#include <linux/hashtable.h>//some stuff here might not be needed will comb through later
 
 #include "veriexec.h"
-
+#define SHA256_HASH_LEN 64
 #define CMDSIZE 4096
-#define SIGSIZE 16
+//#define SIGSIZE (16)
 
-DEFINE_HASHTABLE(sigTable, SIGSIZE) //32 might be big as it makes the amount of buckets 2^32
+DEFINE_HASHTABLE(sigTable, 16); //32 might be big as it makes the amount of buckets 2^32
 
 hash_init(sigTable);
 //this is the hashtable we are using to store signatures
@@ -81,9 +83,9 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 
 	} else if(flag==4){
 		if(strncmp(p, "DIRECT",dist)==0){
- 			vobj->flag = DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
+ 			vobj->flag = VERIEXEC_OBJ_DIRECT;//I dont know if we created flags for this yet so ill leave as is but this wont compile
  		} else if(strncmp(p, "INDIRECT",dist)==0){
- 			vobj->flag = INDIRECT;
+ 			vobj->flag = VERIEXEC_OBJ_INDIRECT;
  		} else {
  			printk("incorrect flag");
  			return -1;
@@ -91,7 +93,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 
 	} else if(flag==5){
 		file = filp_open(vobj->filepath, O_RDONLY, 0); // lets open file
-		hlnSize = kmalloc(sizeof(struct hlist_node), GFP_KERNEL); //hashlistnodeSize
+		//int * hlnSize = kmalloc(sizeof(struct hlist_node), GFP_KERNEL); //hashlistnodeSize
 
 
 		if(file == NULL) {	//and then check to see if its there
@@ -107,6 +109,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 	}
 	
 }
+return -1;
 }
 
 

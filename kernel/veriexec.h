@@ -17,7 +17,11 @@ typedef enum vobj_type {
 	VERIEXEC_OBJ_EXTERNAL /* For external execution launching */
 } vobj_type_t;
 
-
+typedef enum vobj_flag {
+	VERIEXEC_OBJ_DIRECT = 0,
+	VERIEXEC_OBJ_INDIRECT /* For external execution launching */
+} vobj_flag_t;
+//need stucture for
 typedef struct veriexec_object {
 	char hash_sum[SHA256_HASH_LEN];
 	uint64_t flag; //set to direct of indirect
