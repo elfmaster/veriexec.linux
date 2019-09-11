@@ -29,8 +29,8 @@ MODULE_AUTHOR("ElfMaster and TrevorG");
 static struct proc_dir_entry *ent;
 
 static ssize_t
-recv_veriexec_cmd(struct file *file, const char __user *ubuf,
-    size_t count)
+recv_veriexec_cmd(struct file *file, char __user *ubuf,
+    size_t count)//ubuf used to be a const however i do manipulations to it so i changed it away might add it back
 {
 	struct veriexec_object * vobj;
 	char *p = ubuf;
@@ -104,7 +104,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
     	}
 
  		//hash_add(sigTable, hlnSize, &vobj->hash_table, vobj->hash_sum);//actually key is gonna be the signature
-		hash_add(sigTable, &vobj->hash_table, vobj->hash_sum);//seen it used with bits but when I looked at code doesnt use bits?
+		hash_add(sigTable, &vobj->hash_table, *vobj->hash_sum);//seen it used with bits but when I looked at code doesnt use bits?
 		return 0;
 	}
 	
