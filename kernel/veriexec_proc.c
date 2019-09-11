@@ -5,16 +5,17 @@
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 #include <linux/errno.h>
-#include <linux/types.h> 
+#include <linux/types.h> //dont think I need this anymore
+#include <linux/rhashtable.h> //need this for rhashtable which is new implementation
 
 #include "veriexec.h"
 
 #define CMDSIZE 4096
 #define SIGSIZE 16
 
-static DEFINE_HASHTABLE(sigTable, SIGSIZE); //32 might be big as it makes the amount of buckets 2^32
+DEFINE_HASHTABLE(sigTable, SIGSIZE) //32 might be big as it makes the amount of buckets 2^32
 
-
+hash_init(sigTable);
 //this is the hashtable we are using to store signatures
 //this isnt defined correctly, I will figure out how to do that, it its literally the amount of bits we can use 
 //like if I have 3 bits I can have 8 buckets as 2^3 or 2^n
@@ -23,13 +24,11 @@ static DEFINE_HASHTABLE(sigTable, SIGSIZE); //32 might be big as it makes the am
 MODULE_LICENSE("LSD");
 MODULE_AUTHOR("ElfMaster and TrevorG");
 
-
-		//til I find a better way to derive a key
 static struct proc_dir_entry *ent;
 
 static ssize_t
 recv_veriexec_cmd(struct file *file, const char __user *ubuf,
-    size_t count, loff_t *ppos)
+    size_t count)
 {
 	struct veriexec_object * vobj;
 	char *p = ubuf;
@@ -41,7 +40,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 	if(*p==0x20){//will eventually throw out other shit we dont need besides spaces
 		*prev = *p;
 		dist = *prev-*p-1;//nick would kill me
-		printk("%zu is diff of ptrs", dist);
+		printk("%zu is diff of ptrs", dist);//this is debug, remove later
 		while((*p+1)==0x20){//looks for extra spaces, make sure you copy stings based off of prev not p
 			printk("there was an extra space");
 			*p=*p+1;
@@ -73,7 +72,12 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
  	} else if(flag==3){
  		//need to handle signature
  		//will add things in to verify signature size later
- 		strncpy(prev,vobj->hash_sum,dist);
+ 		if(dist == SHA256_HASH_LEN){
+ 			strncpy(prev,vobj->hash_sum,dist);
+ 		} else {
+ 			printk("the signature size is incorrect");
+ 			return -1;
+ 		}
 
 	} else if(flag==4){
 		if(strncmp(p, "DIRECT",dist)==0){
@@ -87,7 +91,7 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
 
 	} else if(flag==5){
 		file = filp_open(vobj->filepath, O_RDONLY, 0); // lets open file
-		hlnSize = kmalloc(sizeof(struct hlist_node *), GFP_KERNEL); //hashlistnodeSize
+		hlnSize = kmalloc(sizeof(struct hlist_node), GFP_KERNEL); //hashlistnodeSize
 
 
 		if(file == NULL) {	//and then check to see if its there
@@ -97,7 +101,8 @@ recv_veriexec_cmd(struct file *file, const char __user *ubuf,
     		vobj->filepath=prev;//we verify this later
     	}
 
- 		hash_add(sigTable, hlnSize, &vobj->hash_table, vobj->hash_sum);//actually key is gonna be the signature
+ 		//hash_add(sigTable, hlnSize, &vobj->hash_table, vobj->hash_sum);//actually key is gonna be the signature
+		hash_add(sigTable, &vobj->hash_table, vobj->hash_sum);//seen it used with bits but when I looked at code doesnt use bits?
 		return 0;
 	}
 	
