@@ -36,7 +36,7 @@
 #define MAX_CACHE_SIZE 64000
 #define CMD_SIZE 8192
 
-#define PROC_ENTRY "/tmp/veriexec.tmp"
+#define PROC_ENTRY "/proc/veriexec"
 
 SLIST_HEAD(vobj_list, veriexec_object) vobj_list;
 struct hsearch_data path_cache;
