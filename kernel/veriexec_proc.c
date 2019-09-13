@@ -6,7 +6,6 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/types.h> //dont think I need this anymore
-#include <linux/rhashtable.h> //need this for rhashtable which is new implementation
 #include <linux/hashtable.h>//some stuff here might not be needed will comb through later
 
 #include "veriexec.h"
@@ -32,28 +31,36 @@ recv_veriexec_cmd(struct file *file, const char *ubuf,
     size_t count, loff_t *off)//ubuf used to be a const however i do manipulations to it so i changed it away might add it back
 {
 	struct veriexec_object * vobj;
+	vobj =(struct veriexec_object*)kmalloc(sizeof(struct veriexec_object),GFP_KERNEL);
 	char *p = ubuf;
 	char *prev;
-	size_t dist;
+	size_t dist = 4;//ill fix this when i fix the flags but I forgetto set a vlaue before the heck therefore the first strncpy is size undefined
 	int flag = 0; //bad way of doing this, will fix later
-	while(p){
+	//while(p){
+	while(flag<6){//i will change this had to change for debug reasons
 	flag++;
-
-	printk(KERN_DEBUG "inside the fuqin function bitch\n");
-//	(void) off;
+	printk(KERN_DEBUG "the flag is %d",flag);
+	printk(KERN_DEBUG "inside the fuqin function bitch where p is %s and dist = %zu\n",p,dist);
 
 	if(*p==0x20){//will eventually throw out other shit we dont need besides spaces
 		*prev = *p;
 		dist = *prev-*p-1;//nick would kill me
+		//dist = *p-*prev-1;//i am sure it the one above just check vals
 		printk("%zu is diff of ptrs", dist);//this is debug, remove later
 		while((*p+1)==0x20){//looks for extra spaces, make sure you copy stings based off of prev not p
 			printk("there was an extra space");
 			*p=*p+1;
+			printk(KERN_DEBUG "pointer value p is = %d", *p);
 		}
 	}
+	printk(KERN_DEBUG "checkin dist b4 flag sit = %zu",dist);
 	if(flag == 1){
+		printk(KERN_DEBUG "flag 1 precompare where p = %s and dist is %ld",p, dist);
 		if (strncmp(p, "EXEC", dist)==0) {
-    		vobj->type = VERIEXEC_OBJ_EXEC;
+			printk(KERN_DEBUG "flag 1 post compare strncmp success");
+    			vobj->type = VERIEXEC_OBJ_EXEC;
+			printk(KERN_DEBUG "is it even hitting this");
+			printk(KERN_DEBUG "vobj is %lld ",vobj->type);
    		}else if (strncmp(prev, "SO", dist)==0){
  			vobj->type = VERIEXEC_OBJ_SO;
     	}else if (strncmp(prev, "FILE", dist)==0){
@@ -67,6 +74,7 @@ recv_veriexec_cmd(struct file *file, const char *ubuf,
  			return -1;
  		}
 	} else if(flag == 2){
+		printk(KERN_DEBUG "flag 2 is set");
 		if(dist > 4096 && dist <1){
  			printk("path size is either to long or to short");
  			return -1;
