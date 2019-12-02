@@ -35,10 +35,10 @@ recv_veriexec_cmd(struct file *file, const char *ubuf,
 	char *p = ubuf;
 	char *prev;
 	size_t dist = 0;//ill fix this when i fix the flags but I forgetto set a vlaue before the heck therefore the first strncpy is size undefined
-	int flag = 0; //bad way of doing this, will fix later
+	int flag = 1; //bad way of doing this, will fix later
 	while(*p != '\0'){
 	//while(flag<6){//i will change this had to change for debug reasons
-		flag++;
+		//flag++;
 		printk(KERN_DEBUG "the flag is %d",flag);
 		printk(KERN_DEBUG "inside the fuqin function bitch where p is %s and dist = %zu\n",p,dist);
 
@@ -52,6 +52,7 @@ recv_veriexec_cmd(struct file *file, const char *ubuf,
 				*p++;
 				printk(KERN_DEBUG "pointer value p is = %d", *p);
 			}
+			flag++;
 		}
 		printk(KERN_DEBUG "checkin dist b4 flag sit = %zu",dist);
 		if(flag == 1){
